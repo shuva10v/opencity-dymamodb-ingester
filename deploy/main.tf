@@ -168,7 +168,7 @@ resource "aws_lambda_permission" "cloudwatch_trigger" {
 resource "aws_cloudwatch_event_rule" "lambda_cron" {
   name                = "OpenCity_EMR_scheduler"
   description         = "Schedule trigger for lambda execution"
-  schedule_expression = "rate(5 minutes)"
+  schedule_expression = "rate(4 hours)"
 }
 
 resource "aws_cloudwatch_event_target" "lambda" {

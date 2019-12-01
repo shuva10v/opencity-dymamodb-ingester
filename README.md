@@ -21,7 +21,8 @@ mvn clean install
 4. Prepare terraform config file `config.tfvars`:
 
 ``
-
+region="es-east-1"
+jar_path="s3://your_bucket/jars/spark-kinesis-ingester-1.0-SNAPSHOT.jar"
 ``
 
 5. Apply it:

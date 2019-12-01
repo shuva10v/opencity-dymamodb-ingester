@@ -25,6 +25,20 @@ def lambda_handler(event, context):
         Applications=[{"Name": "Ganglia"}, {"Name": "Spark"}],
         ServiceRole='EMR_DefaultRole',
         JobFlowRole='EMR_EC2_DefaultRole',
+        Configurations=[
+            {
+                'Classification': 'spark-hive-site',
+                'Properties': {
+                    'hive.metastore.client.factory.class': 'com.amazonaws.glue.catalog.metastore.AWSGlueDataCatalogHiveClientFactory'
+                }
+            },
+            {
+                'Classification': 'hive-site',
+                'Properties': {
+                    'hive.metastore.client.factory.class': 'com.amazonaws.glue.catalog.metastore.AWSGlueDataCatalogHiveClientFactory'
+                }
+            }
+        ],
         Instances={
             'InstanceGroups': [
                 {

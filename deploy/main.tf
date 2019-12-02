@@ -131,7 +131,7 @@ resource "aws_lambda_function" "lambda_ddb_writer" {
 }
 
 resource "aws_lambda_event_source_mapping" "kinesis_stream_event_source" {
-  batch_size = 100
+  batch_size = 50
   event_source_arn  = aws_kinesis_stream.opencity_stream.arn
   function_name     = aws_lambda_function.lambda_ddb_writer.arn
   starting_position = "TRIM_HORIZON"
@@ -168,7 +168,7 @@ resource "aws_lambda_permission" "cloudwatch_trigger" {
 resource "aws_cloudwatch_event_rule" "lambda_cron" {
   name                = "OpenCity_EMR_scheduler"
   description         = "Schedule trigger for lambda execution"
-  schedule_expression = "rate(4 hours)"
+  schedule_expression = "rate(2 hours)"
 }
 
 resource "aws_cloudwatch_event_target" "lambda" {

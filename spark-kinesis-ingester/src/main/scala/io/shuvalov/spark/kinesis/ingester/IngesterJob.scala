@@ -13,7 +13,6 @@ object IngesterJob {
 		import spark.implicits._
 		val pushToKinesis = source.mapPartitions{iter => 
 	    	val kinesisClient = new AmazonKinesisClient()
-	    	kinesisClient.setEndpoint("https://kinesis.eu-west-1.amazonaws.com")
 		    iter.map{ obj =>
 		        val put = new PutRecordRequest()
 		        put.setStreamName(streamName)

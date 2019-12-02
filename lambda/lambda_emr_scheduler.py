@@ -55,7 +55,7 @@ def lambda_handler(event, context):
                     'BidPrice': '0.2',
                     'InstanceRole': 'CORE',
                     'InstanceType': 'm3.xlarge',
-                    'InstanceCount': 4
+                    'InstanceCount': 3
                 }
             ]
         },

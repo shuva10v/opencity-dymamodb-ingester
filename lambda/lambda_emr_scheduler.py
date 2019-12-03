@@ -16,10 +16,29 @@ STATES = ["Alabama","Alaska","Arizona","Arkansas","California","Colorado","Conne
 
 def lambda_handler(event, context):
     jar_path = os.environ['JAR_PATH']
-    state = random.choice(STATES)
-    print("Launching converter for %s" % state)
+    states = [random.choice(STATES) for i in range(4)]
+    print("Launching converter for %s and other" % states[0])
+    def step(state):
+        return {
+                'Name': 'Convert %s' % state,
+                'ActionOnFailure': 'TERMINATE_CLUSTER',
+                'HadoopJarStep': {
+                    'Jar': 'command-runner.jar',
+                    'Args': [
+                        'spark-submit',
+                        '--deploy-mode', 'cluster',
+                        '--conf', 'spark.sql.catalogImplementation=hive',
+                        '--conf', 'spark.yarn.maxAppAttempts=1',
+                        '--class', 'io.shuvalov.spark.kinesis.ingester.IngesterJob',
+                        jar_path,
+                        'select * from opencitymodel.jun2019 where state = "%s"' % state,
+                        'OpenCity'
+                    ]
+                }
+            }
+ 
     cluster = emr.run_job_flow(
-        Name="OpenCity converter for %s" % state,
+        Name="OpenCity converter for %s" % states[0],
         ReleaseLabel='emr-5.28.0',
         VisibleToAllUsers=True,
         Applications=[{"Name": "Ganglia"}, {"Name": "Spark"}],
@@ -59,25 +78,7 @@ def lambda_handler(event, context):
                 }
             ]
         },
-        Steps=[
-            {
-                'Name': 'Convert %s' % state,
-                'ActionOnFailure': 'TERMINATE_CLUSTER',
-                'HadoopJarStep': {
-                    'Jar': 'command-runner.jar',
-                    'Args': [
-                        'spark-submit',
-                        '--deploy-mode', 'cluster',
-                        '--conf', 'spark.sql.catalogImplementation=hive',
-                        '--conf', 'spark.yarn.maxAppAttempts=1',
-                        '--class', 'io.shuvalov.spark.kinesis.ingester.IngesterJob',
-                        jar_path,
-                        'select * from opencitymodel.jun2019 where state = "%s"' % state,
-                        'OpenCity'
-                    ]
-                }
-            }
-        ]
+        Steps=list(map(step, states))
     )
     print("Launched cluster %s" % cluster)
 

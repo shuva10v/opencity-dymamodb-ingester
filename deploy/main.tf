@@ -26,6 +26,35 @@ resource "aws_dynamodb_table" "opencity_ddb" {
   }
 }
 
+data "aws_iam_role" "DynamoDBAutoscaleRole" {
+  name = "AWSServiceRoleForApplicationAutoScaling_DynamoDBTable"
+}
+
+resource "aws_appautoscaling_target" "opencity_table_write_target" {
+  max_capacity       = 3000
+  min_capacity       = 5
+  resource_id        = "table/${aws_dynamodb_table.opencity_ddb.name}"
+  role_arn           = data.aws_iam_role.DynamoDBAutoscaleRole.arn
+  scalable_dimension = "dynamodb:table:WriteCapacityUnits"
+  service_namespace  = "dynamodb"
+}
+
+resource "aws_appautoscaling_policy" "opencity_table_write_policy" {
+  name               = "DynamoDBWriteCapacityUtilization:${aws_appautoscaling_target.opencity_table_write_target.resource_id}"
+  policy_type        = "TargetTrackingScaling"
+  resource_id        = aws_appautoscaling_target.opencity_table_write_target.resource_id
+  scalable_dimension = aws_appautoscaling_target.opencity_table_write_target.scalable_dimension
+  service_namespace  = aws_appautoscaling_target.opencity_table_write_target.service_namespace
+
+  target_tracking_scaling_policy_configuration {
+    predefined_metric_specification {
+      predefined_metric_type = "DynamoDBWriteCapacityUtilization"
+    }
+
+    target_value = 80
+  }
+}
+
 resource "aws_kinesis_stream" "opencity_stream" {
   name = "OpenCity"
   shard_count = 10

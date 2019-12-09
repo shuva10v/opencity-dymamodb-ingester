@@ -31,6 +31,7 @@ mvn clean install
 ````
 region="es-east-1"
 jar_path="s3://your_bucket/jars/spark-kinesis-ingester-1.0-SNAPSHOT.jar"
+s3_static_bucket_name="static-content-bucket"
 ````
 
 5. Apply it:

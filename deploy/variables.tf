@@ -8,3 +8,8 @@ variable "jar_path" {
   description = "spark-kinesis-ingester Jar path"
 }
 
+variable "s3_static_bucket_name" {
+  type = string
+  description = "Name of the bucket with static content"
+}
+

@@ -24,6 +24,11 @@ resource "aws_dynamodb_table" "opencity_ddb" {
     name = "ubid"
     type = "S"
   }
+  lifecycle {
+    ignore_changes = [
+      write_capacity
+    ]
+  }
 }
 
 data "aws_iam_role" "DynamoDBAutoscaleRole" {
@@ -31,8 +36,8 @@ data "aws_iam_role" "DynamoDBAutoscaleRole" {
 }
 
 resource "aws_appautoscaling_target" "opencity_table_write_target" {
-  max_capacity       = 3000
-  min_capacity       = 5
+  max_capacity       = 1500
+  min_capacity       = 100
   resource_id        = "table/${aws_dynamodb_table.opencity_ddb.name}"
   role_arn           = data.aws_iam_role.DynamoDBAutoscaleRole.arn
   scalable_dimension = "dynamodb:table:WriteCapacityUnits"
@@ -51,7 +56,7 @@ resource "aws_appautoscaling_policy" "opencity_table_write_policy" {
       predefined_metric_type = "DynamoDBWriteCapacityUtilization"
     }
 
-    target_value = 80
+    target_value = 60
   }
 }
 
@@ -197,7 +202,7 @@ resource "aws_lambda_permission" "cloudwatch_trigger" {
 resource "aws_cloudwatch_event_rule" "lambda_cron" {
   name                = "OpenCity_EMR_scheduler"
   description         = "Schedule trigger for lambda execution"
-  schedule_expression = "rate(2 hours)"
+  schedule_expression = "rate(3 hours)"
 }
 
 resource "aws_cloudwatch_event_target" "lambda" {
@@ -205,3 +210,107 @@ resource "aws_cloudwatch_event_target" "lambda" {
   rule      = aws_cloudwatch_event_rule.lambda_cron.name
   arn       = aws_lambda_function.lambda_emr_scheduler.arn
 }
+
+# Static web site
+
+resource "aws_s3_bucket" "s3_static_bucket" {
+  bucket = var.s3_static_bucket_name
+
+  acl = "public-read"
+
+  policy = <<EOF
+{
+  "Version":"2012-10-17",
+  "Statement":[{
+	"Sid":"PublicReadGetObject",
+        "Effect":"Allow",
+	  "Principal": "*",
+      "Action":["s3:GetObject"],
+      "Resource":["arn:aws:s3:::${var.s3_static_bucket_name}/*"
+      ]
+    }
+  ]
+}
+EOF
+
+  website {
+    index_document = "index.html"
+  }
+
+}
+
+resource "aws_s3_bucket_object" "static_file" {
+  bucket = var.s3_static_bucket_name
+  key = "index.html"
+  source = "../static/index.html"
+  depends_on = [aws_s3_bucket.s3_static_bucket]
+  content_type = "text/html"
+
+  etag = filemd5("../static/index.html")
+}
+
+# web app backend
+
+data "archive_file" "lambda_ddb_reader_zip" {
+  type        = "zip"
+  source_file = "${path.module}/../lambda/lambda_ddb_reader.py"
+  output_path = "${path.module}/files/lambda_ddb_reader.zip"
+}
+
+resource "aws_lambda_function" "lambda_ddb_reader" {
+  function_name = "WebAppBackendDDBReader"
+  handler = "lambda_ddb_reader.lambda_handler"
+  filename = data.archive_file.lambda_ddb_reader_zip.output_path
+  source_code_hash = data.archive_file.lambda_ddb_reader_zip.output_base64sha256
+  role = aws_iam_role.opencity_lambda_role.arn
+  runtime = "python3.6"
+}
+
+resource "aws_api_gateway_rest_api" "opencity_webapp_backend" {
+  name = "OpenCityWebApp"
+}
+
+resource "aws_api_gateway_resource" "opencity_webapp_api_proxy" {
+  parent_id = aws_api_gateway_rest_api.opencity_webapp_backend.root_resource_id
+  path_part = "{proxy+}"
+  rest_api_id = aws_api_gateway_rest_api.opencity_webapp_backend.id
+}
+
+resource "aws_api_gateway_method" "opencity_webapp_api_proxy_method" {
+  authorization = "NONE"
+  http_method = "ANY"
+  resource_id = aws_api_gateway_resource.opencity_webapp_api_proxy.id
+  rest_api_id = aws_api_gateway_rest_api.opencity_webapp_backend.id
+}
+
+resource "aws_api_gateway_integration" "opencity_webapp_api_lambda" {
+  rest_api_id = aws_api_gateway_rest_api.opencity_webapp_backend.id
+  resource_id = aws_api_gateway_resource.opencity_webapp_api_proxy.id
+  http_method = aws_api_gateway_method.opencity_webapp_api_proxy_method.http_method
+
+  integration_http_method = "POST"
+  type = "AWS_PROXY"
+  uri = aws_lambda_function.lambda_ddb_reader.invoke_arn
+}
+
+resource "aws_api_gateway_deployment" "opencity_webapp_api_deployment" {
+  depends_on = [aws_lambda_function.lambda_ddb_reader, aws_api_gateway_integration.opencity_webapp_api_lambda]
+  rest_api_id = aws_api_gateway_rest_api.opencity_webapp_backend.id
+  stage_name = "opencity"
+}
+
+resource "aws_lambda_permission" "apigateway_permission" {
+  statement_id  = "AllowAPIGatewayInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.lambda_ddb_reader.function_name
+  principal     = "apigateway.amazonaws.com"
+
+  # The "/*/*" portion grants access from any method on any resource
+  # within the API Gateway REST API.
+  source_arn = "${aws_api_gateway_rest_api.opencity_webapp_backend.execution_arn}/*/*"
+}
+
+output "backend_api_url" {
+  value = aws_api_gateway_deployment.opencity_webapp_api_deployment.invoke_url
+}
+

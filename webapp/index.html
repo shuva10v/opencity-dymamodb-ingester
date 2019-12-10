@@ -1,0 +1,45 @@
+<html>
+<head>
+	<meta charset="utf-8">
+	<link rel="stylesheet" href="dist/app.css"/>
+	<script src="dist/app.js"></script>
+	<title>OpenCity</title>
+</head>
+<body>
+	<div class="container">
+		<div class="alert alert-warning alert-dismissible fade show" style="display:none;" role="alert" id="alert-box">
+			<b id="error-text"></b>
+			<button type="button" class="close" data-dismiss="alert" aria-label="Close">
+				<span aria-hidden="true">&times;</span>
+			</button>
+		</div>
+		<h1>Check building</h1>
+		<button type="button" class="badge-info" id="nyc">
+			<span>New York City</span>
+		</button>
+		<br/>
+		<label for="lat">Latitude</label>
+		<div class="input-group mb-3">
+			<input type="text" class="form-control" id="lat">
+		</div>
+		<label for="lon">Longitude</label>
+		<div class="input-group mb-3">
+			<input type="text" class="form-control" id="lon">
+		</div>
+		<button type="button" class="btn btn-info" id="request-buildings">Request</button>
+		<table class="table">
+			<thead>
+			<tr>
+				<th scope="col">#</th>
+				<th scope="col">UBID</th>
+				<th scope="col">State</th>
+				<th scope="col">Height</th>
+				<th scope="col">Area</th>
+			</tr>
+			</thead>
+			<tbody id="results">
+			</tbody>
+		</table>
+	</div>
+</body>
+</html>

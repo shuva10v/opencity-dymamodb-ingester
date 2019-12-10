@@ -8,7 +8,8 @@ How it works:
 2. [spark-kinesis-ingester](./spark-kinesis-ingester/) reads data from S3 Data Lake (tables metadata comes from Glue Data Catalog)
 and puts it into Kinesis stream. [Open City Model](https://github.com/opencitymodel/opencitymodel) data partitioned by US states
  and on each invocation one random US state data processed.
-3. Lambda function [OpenCityDDBWriter](./lambda/lambda_ddb_writer.py) reads records from the Kinesis stream and puts it into DynamoDB table.  
+3. Lambda function [OpenCityDDBWriter](./lambda/lambda_ddb_writer.py) reads records from the Kinesis stream and puts it into DynamoDB table.
+4. Web application for navigating OpenCity data build with Lambda and API Gateway.  
 
 Overall architecture: 
 
@@ -34,11 +35,38 @@ jar_path="s3://your_bucket/jars/spark-kinesis-ingester-1.0-SNAPSHOT.jar"
 s3_static_bucket_name="static-content-bucket"
 ````
 
-5. Apply it:
+5. Go to [webapp](./webapp) folder and build frontend:
+
+```
+npm install
+gulp
+```
+
+6. Apply it:
 
 ````
 terraform init
 terraform plan -var-file=config.tfvars
 terraform apply -var-file=config.tfvars
+````             
+
+It outputs API Gateway endpoint:
 ````
+Outputs:
+
+backend_api_url = https://???????.execute-api.eu-west-1.amazonaws.com/opencity
+````             
+
+7.  Go to [webapp](./webapp) folder and build frontend with api url from the previous step:
+    
+```
+gulp --api_endpoint https://???????.execute-api.eu-west-1.amazonaws.com/opencity
+```                                                                             
+
+8. Apply terraform one more time:
+
+````
+terraform apply -var-file=config.tfvars
+````
+
 

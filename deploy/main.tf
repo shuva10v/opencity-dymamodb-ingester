@@ -104,6 +104,25 @@ resource "aws_iam_policy" "opencity_batchwrite_policy" {
 EOF
 }
 
+resource "aws_iam_policy" "opencity_read_policy" {
+  name        = "opencity_read_policy"
+  path        = "/"
+
+  policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "VisualEditor0",
+            "Effect": "Allow",
+            "Action": "dynamodb:Query",
+            "Resource": "${aws_dynamodb_table.opencity_ddb.arn}"
+        }
+    ]
+}
+EOF
+}
+
 data "aws_caller_identity" "current" {}
 
 resource "aws_iam_policy" "opencity_emr_policy" {
@@ -147,6 +166,11 @@ resource "aws_iam_role_policy_attachment" "opencity_lambda_policy2" {
 resource "aws_iam_role_policy_attachment" "opencity_lambda_policy3" {
   role       = aws_iam_role.opencity_lambda_role.name
   policy_arn = aws_iam_policy.opencity_emr_policy.arn
+}
+
+resource "aws_iam_role_policy_attachment" "opencity_lambda_policy4" {
+  role       = aws_iam_role.opencity_lambda_role.name
+  policy_arn = aws_iam_policy.opencity_read_policy.arn
 }
 
 data "archive_file" "lambda_ddb_writer_zip" {
@@ -236,17 +260,21 @@ EOF
   website {
     index_document = "index.html"
   }
+}
 
+locals {
+  static_files = ["index.html", "dist/app.css", "dist/app.js"]
 }
 
 resource "aws_s3_bucket_object" "static_file" {
+  for_each = toset(local.static_files)
   bucket = var.s3_static_bucket_name
-  key = "index.html"
-  source = "../static/index.html"
-  depends_on = [aws_s3_bucket.s3_static_bucket]
+  key = each.key
+  source = "../webapp/${each.key}"
+  depends_on = [aws_s3_bucket.s3_static_bucket, aws_api_gateway_deployment.opencity_webapp_api_deployment]
   content_type = "text/html"
 
-  etag = filemd5("../static/index.html")
+  etag = filemd5("../webapp/${each.key}")
 }
 
 # web app backend

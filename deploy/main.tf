@@ -67,7 +67,8 @@ resource "aws_kinesis_stream" "opencity_stream" {
 
 resource "aws_kinesis_stream" "osm_stream" {
   name = "OSM"
-  shard_count = 20
+  shard_count = 40
+  retention_period = 48
 }
 
 resource "aws_iam_role" "opencity_lambda_role" {

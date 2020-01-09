@@ -30,6 +30,11 @@ def lambda_handler(event, context):
             #print(payload)
             obj = json.loads(payload.decode("utf-8"))
             obj['ubid'] = str(obj['hash'])
+            for field in ['nds', 'members', 'tags']:
+                if field in obj:
+                    obj[field] = json.loads(obj[field])
+                    if len(obj[field]) == 0:
+                        del obj[field]
             for length in [8, 10, 11, 12]:
                 grid = encode(obj['lat'], obj['lon'], length)
                 obj['grid'] = "OSM:" + grid
@@ -41,10 +46,16 @@ def lambda_handler(event, context):
                     o[field] = Decimal(str(o[field]))
                 items[o['grid'] + o['hash']] = o
         for item in items.values():
-            #print(item)
-            batch.put_item(
-                Item=item
-            )
+            for k in list(item.keys()):
+                if item[k] == '':
+                    del item[k]
+            try:
+                batch.put_item(
+                    Item=item
+                )
+            except Exception as e:
+                print("Unable to process item '%s'" % item)
+                raise e
     print("Processed %d, %d distinct items" % (len(event['Records']), len(items)))
     # print("Decoded payload: " + obj)
 

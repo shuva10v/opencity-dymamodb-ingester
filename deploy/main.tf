@@ -36,7 +36,7 @@ data "aws_iam_role" "DynamoDBAutoscaleRole" {
 }
 
 resource "aws_appautoscaling_target" "opencity_table_write_target" {
-  max_capacity       = 1500
+  max_capacity       = 20000
   min_capacity       = 100
   resource_id        = "table/${aws_dynamodb_table.opencity_ddb.name}"
   role_arn           = data.aws_iam_role.DynamoDBAutoscaleRole.arn
@@ -63,6 +63,11 @@ resource "aws_appautoscaling_policy" "opencity_table_write_policy" {
 resource "aws_kinesis_stream" "opencity_stream" {
   name = "OpenCity"
   shard_count = 10
+}
+
+resource "aws_kinesis_stream" "osm_stream" {
+  name = "OSM"
+  shard_count = 20
 }
 
 resource "aws_iam_role" "opencity_lambda_role" {
@@ -188,10 +193,33 @@ resource "aws_lambda_function" "lambda_ddb_writer" {
   runtime = "python3.6"
 }
 
+data "archive_file" "lambda_ddb_writer_osm_zip" {
+  type        = "zip"
+  source_dir = "${path.module}/../lambda/osm/"
+  output_path = "${path.module}/files/lambda_ddb_writer_osm.zip"
+}
+
+resource "aws_lambda_function" "lambda_ddb_writer_osm" {
+  function_name = "OSMDDBWriter"
+  handler = "lambda_ddb_writer_osm.lambda_handler"
+  filename = data.archive_file.lambda_ddb_writer_osm_zip.output_path
+  source_code_hash = data.archive_file.lambda_ddb_writer_osm_zip.output_base64sha256
+  role = aws_iam_role.opencity_lambda_role.arn
+  timeout = 600
+  runtime = "python3.6"
+}
+
 resource "aws_lambda_event_source_mapping" "kinesis_stream_event_source" {
   batch_size = 50
   event_source_arn  = aws_kinesis_stream.opencity_stream.arn
   function_name     = aws_lambda_function.lambda_ddb_writer.arn
+  starting_position = "TRIM_HORIZON"
+}
+
+resource "aws_lambda_event_source_mapping" "osm_kinesis_stream_event_source" {
+  batch_size = 100
+  event_source_arn  = aws_kinesis_stream.osm_stream.arn
+  function_name     = aws_lambda_function.lambda_ddb_writer_osm.arn
   starting_position = "TRIM_HORIZON"
 }
 
@@ -227,6 +255,7 @@ resource "aws_cloudwatch_event_rule" "lambda_cron" {
   name                = "OpenCity_EMR_scheduler"
   description         = "Schedule trigger for lambda execution"
   schedule_expression = "rate(3 hours)"
+  is_enabled = false
 }
 
 resource "aws_cloudwatch_event_target" "lambda" {

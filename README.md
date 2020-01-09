@@ -67,6 +67,28 @@ gulp --api_endpoint https://???????.execute-api.eu-west-1.amazonaws.com/opencity
 
 ````
 terraform apply -var-file=config.tfvars
+````                  
+
+# Init OSM data
+
+To init OSM data:
+
+1. Run CMR cluster
+
+2. Create `planet` table as described [here](https://aws.amazon.com/blogs/big-data/querying-openstreetmap-with-amazon-athena/)
+
+3. Run Job with:
+
+````
+spark-submit 
+--deploy-mode cluster 
+--conf spark.sql.catalogImplementation=hive 
+--conf spark.yarn.maxAppAttempts=1 
+--class io.shuvalov.spark.kinesis.ingester.IngesterJob 
+%jar_path%
+"SELECT concat('', id) as hash, type, to_json(tags) as tags, lat, lon, to_json(nds) as nds, to_json(members) as members, 
+unix_timestamp(timestamp) as timestamp, uid, user, version FROM opencitymodel.planet limit 10" 
+OSM
 ````
 
 

@@ -29,6 +29,9 @@ gulp.task('minify-js', function(done) {
   gulp.src([
       'node_modules/jquery/dist/jquery.min.js',
       'node_modules/bootstrap/dist/js/bootstrap.bundle.min.js',
+      'node_modules/leaflet/dist/leaflet.js',
+      'node_modules/wicket/wicket.js',
+      'node_modules/wicket/wicket-leaflet.js',
       'dist/bundle.js'
   ])
       .pipe(concat('app.js'))
@@ -44,11 +47,19 @@ gulp.task('minify-js', function(done) {
 
 gulp.task('minify-css', function(done) {
     gulp.src([
-        'node_modules/bootstrap/dist/css/bootstrap.min.css'])
+        'node_modules/bootstrap/dist/css/bootstrap.min.css', 'node_modules/leaflet/dist/leaflet.css'])
         .pipe(concat('app.css'))
         .pipe(gulp.dest('dist'));
     done();
 });
+
+gulp.task('images', function(done) {
+    gulp.src([
+        'node_modules/leaflet/dist/images/*'])
+        .pipe(gulp.dest('dist/images/'));
+    done();
+});
+
 
 gulp.task('clean', function (done) {
     del(['.tmp', 'dist']);
@@ -56,4 +67,4 @@ gulp.task('clean', function (done) {
 })
 
 
-gulp.task('default', gulp.series('clean', 'browserify', 'minify-js', 'minify-css'));
+gulp.task('default', gulp.series('clean', 'browserify', 'minify-js', 'minify-css', 'images'));

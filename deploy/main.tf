@@ -4,6 +4,7 @@ terraform {
 
 provider "aws" {
   region = var.region
+  version = "~> 2.44.0"
 }
 
 provider "archive" {}
@@ -31,12 +32,30 @@ resource "aws_dynamodb_table" "opencity_ddb" {
   }
 }
 
+resource "aws_dynamodb_table" "usertags_ddb" {
+  name = "UserTags"
+  read_capacity = 100
+  write_capacity = 10
+  hash_key = "ubid"
+  range_key = "timestamp"
+
+  attribute {
+    name = "ubid"
+    type = "S"
+  }
+
+  attribute {
+    name = "timestamp"
+    type = "N"
+  }
+}
+
 data "aws_iam_role" "DynamoDBAutoscaleRole" {
   name = "AWSServiceRoleForApplicationAutoScaling_DynamoDBTable"
 }
 
 resource "aws_appautoscaling_target" "opencity_table_write_target" {
-  max_capacity       = 20000
+  max_capacity       = 40000
   min_capacity       = 100
   resource_id        = "table/${aws_dynamodb_table.opencity_ddb.name}"
   role_arn           = data.aws_iam_role.DynamoDBAutoscaleRole.arn
@@ -67,8 +86,7 @@ resource "aws_kinesis_stream" "opencity_stream" {
 
 resource "aws_kinesis_stream" "osm_stream" {
   name = "OSM"
-  shard_count = 40
-  retention_period = 48
+  shard_count = 1
 }
 
 resource "aws_iam_role" "opencity_lambda_role" {
@@ -122,7 +140,10 @@ resource "aws_iam_policy" "opencity_read_policy" {
             "Sid": "VisualEditor0",
             "Effect": "Allow",
             "Action": "dynamodb:Query",
-            "Resource": "${aws_dynamodb_table.opencity_ddb.arn}"
+            "Resource": [
+              "${aws_dynamodb_table.opencity_ddb.arn}",
+              "${aws_dynamodb_table.usertags_ddb.arn}"
+            ]
         }
     ]
 }
@@ -179,10 +200,35 @@ resource "aws_iam_role_policy_attachment" "opencity_lambda_policy4" {
   policy_arn = aws_iam_policy.opencity_read_policy.arn
 }
 
+data "archive_file" "lambda_openlocationcode_zip" {
+  type        = "zip"
+  source_dir = "${path.module}/../lambda/openlocationcode"
+  output_path = "${path.module}/files/openlocationcode.zip"
+}
+
 data "archive_file" "lambda_ddb_writer_zip" {
   type        = "zip"
   source_file = "${path.module}/../lambda/lambda_ddb_writer.py"
   output_path = "${path.module}/files/lambda_ddb_writer.zip"
+}
+
+data "archive_file" "lambda_ddb_writer_osm_zip" {
+  type        = "zip"
+  source_file = "${path.module}/../lambda/lambda_ddb_writer_osm.py"
+  output_path = "${path.module}/files/lambda_ddb_writer_osm.zip"
+}
+
+data "archive_file" "lambda_emr_scheduler_zip" {
+  type        = "zip"
+  source_file = "${path.module}/../lambda/lambda_emr_scheduler.py"
+  output_path = "${path.module}/files/lambda_emr_scheduler.zip"
+}
+
+resource "aws_lambda_layer_version" "openlocationcode" {
+  layer_name = "openlocationcode"
+  filename = data.archive_file.lambda_openlocationcode_zip.output_path
+  source_code_hash = data.archive_file.lambda_openlocationcode_zip.output_base64sha256
+  compatible_runtimes = ["python3.6"]
 }
 
 resource "aws_lambda_function" "lambda_ddb_writer" {
@@ -194,15 +240,12 @@ resource "aws_lambda_function" "lambda_ddb_writer" {
   runtime = "python3.6"
 }
 
-data "archive_file" "lambda_ddb_writer_osm_zip" {
-  type        = "zip"
-  source_dir = "${path.module}/../lambda/osm/"
-  output_path = "${path.module}/files/lambda_ddb_writer_osm.zip"
-}
-
 resource "aws_lambda_function" "lambda_ddb_writer_osm" {
   function_name = "OSMDDBWriter"
   handler = "lambda_ddb_writer_osm.lambda_handler"
+  layers = [
+    aws_lambda_layer_version.openlocationcode.arn
+  ]
   filename = data.archive_file.lambda_ddb_writer_osm_zip.output_path
   source_code_hash = data.archive_file.lambda_ddb_writer_osm_zip.output_base64sha256
   role = aws_iam_role.opencity_lambda_role.arn
@@ -222,12 +265,6 @@ resource "aws_lambda_event_source_mapping" "osm_kinesis_stream_event_source" {
   event_source_arn  = aws_kinesis_stream.osm_stream.arn
   function_name     = aws_lambda_function.lambda_ddb_writer_osm.arn
   starting_position = "TRIM_HORIZON"
-}
-
-data "archive_file" "lambda_emr_scheduler_zip" {
-  type        = "zip"
-  source_file = "${path.module}/../lambda/lambda_emr_scheduler.py"
-  output_path = "${path.module}/files/lambda_emr_scheduler.zip"
 }
 
 resource "aws_lambda_function" "lambda_emr_scheduler" {
@@ -293,7 +330,10 @@ EOF
 }
 
 locals {
-  static_files = ["index.html", "dist/app.css", "dist/app.js"]
+  static_files = ["index.html", "dist/app.css", "dist/app.js",
+    "dist/images/layers-2x.png", "dist/images/layers.png", "dist/images/marker-icon-2x.png",
+    "dist/images/marker-icon.png", "dist/images/marker-shadow.png"
+  ]
 }
 
 resource "aws_s3_bucket_object" "static_file" {
@@ -309,17 +349,20 @@ resource "aws_s3_bucket_object" "static_file" {
 
 # web app backend
 
-data "archive_file" "lambda_ddb_reader_zip" {
+data "archive_file" "lambda_webapp_backend_zip" {
   type        = "zip"
-  source_file = "${path.module}/../lambda/lambda_ddb_reader.py"
-  output_path = "${path.module}/files/lambda_ddb_reader.zip"
+  source_file = "${path.module}/../lambda/lambda_webapp_backend.py"
+  output_path = "${path.module}/files/lambda_webapp_backend.zip"
 }
 
 resource "aws_lambda_function" "lambda_ddb_reader" {
   function_name = "WebAppBackendDDBReader"
-  handler = "lambda_ddb_reader.lambda_handler"
-  filename = data.archive_file.lambda_ddb_reader_zip.output_path
-  source_code_hash = data.archive_file.lambda_ddb_reader_zip.output_base64sha256
+  handler = "lambda_webapp_backend.lambda_handler"
+  layers = [
+    aws_lambda_layer_version.openlocationcode.arn
+  ]
+  filename = data.archive_file.lambda_webapp_backend_zip.output_path
+  source_code_hash = data.archive_file.lambda_webapp_backend_zip.output_base64sha256
   role = aws_iam_role.opencity_lambda_role.arn
   runtime = "python3.6"
 }

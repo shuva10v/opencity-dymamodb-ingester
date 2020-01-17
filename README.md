@@ -1,4 +1,4 @@
-# OpenCity DynamoDB uploader
+# OpenCity & OSM DynamoDB backed geospatial storage demo
 
 The project uploads [Open City Model database](https://github.com/opencitymodel/opencitymodel) and [Open Street Maps](https://docs.opendata.aws/osm-pds/readme.html) to DynamoDB with EMR, Kinesis and Lambda.
 It also provides PoC web application to perform geospatial requests, view buildings and add tags on it.
